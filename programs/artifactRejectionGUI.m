@@ -28,9 +28,8 @@ end
 templateTypes = { ...
     'Median-based', ...
     'Polynomial', ...
-    'Spline', ...
-    'Exponential', ...
-    'Custom'};
+    'Piecewise-linear', ...
+    'Exponential'};
 
 selectedTemplateType = templateTypes{1};
 selectedTrial = 1;
@@ -316,23 +315,27 @@ function updateMedianPlots()
     % 2. PSD
     % ---------------------------------------------------------
 
+    PSDxlims = [0 150];
+
     cla(axMedianPSD);
 
-    [Pmed, fmed] = pwelch( ...
-        medianSignal, [], [], [], fs);
+    N = length(medianSignal);
+    freqVals = (0:N-1) * (fs / N);
 
-    [Ptemp, ftemp] = pwelch( ...
-        fittedMedianTemplate, [], [], [], fs);
+    Pmed = abs(fft(medianSignal));
 
-    plot(axMedianPSD, fmed, 10*log10(Pmed), ...
+    Ptemp = abs(fft(fittedMedianTemplate));
+
+    plot(axMedianPSD, freqVals, 10*log10(Pmed), ...
         'LineWidth', 1.2);
 
     hold(axMedianPSD, 'on');
 
-    plot(axMedianPSD, ftemp, 10*log10(Ptemp), ...
+    plot(axMedianPSD, freqVals, 10*log10(Ptemp), ...
         'LineWidth', 1.2);
 
     hold(axMedianPSD, 'off');
+    xlim(axMedianPSD, PSDxlims);
 
     legend(axMedianPSD, ...
         {'Median', 'Template'}, ...
@@ -410,25 +413,29 @@ function updateTrialPlots()
     % 2. PSD
     % ---------------------------------------------------------
 
+    PSDxlims = [0 150];
+
+    N = length(medianSignal);
+    freqVals = (0:N-1) * (fs / N);
+
     cla(axTrialPSD);
 
-    [Ptrial, ftrial] = pwelch( ...
-        currentTrial, [], [], [], fs);
+    Ptrial = abs(fft(currentTrial));
 
-    [Ptemp, ftemp] = pwelch( ...
-        fittedTrialTemplate, [], [], [], fs);
+    Ptemp = abs(fft(fittedTrialTemplate));
 
     plot(axTrialPSD, ...
-        ftrial, 10*log10(Ptrial), ...
+        freqVals, 10*log10(Ptrial), ...
         'LineWidth', 1.2);
 
     hold(axTrialPSD, 'on');
 
     plot(axTrialPSD, ...
-        ftemp, 10*log10(Ptemp), ...
+        freqVals, 10*log10(Ptemp), ...
         'LineWidth', 1.2);
 
     hold(axTrialPSD, 'off');
+    xlim(axTrialPSD, PSDxlims);
 
     legend(axTrialPSD, ...
         {'Trial', 'Template'}, ...
@@ -538,7 +545,8 @@ function runArtifactRejection(~, ~)
             10*log10(avgBefore + eps));
 
         axis(axBefore, 'xy');
-
+        ylim(axBefore, [0 150]);
+        colormap(axBefore, jet);
         colorbar(axBefore);
 
         title(axBefore, ...
@@ -559,7 +567,8 @@ function runArtifactRejection(~, ~)
             10*log10(avgAfter + eps));
 
         axis(axAfter, 'xy');
-
+        ylim(axAfter, [0 150]);
+        colormap(axAfter, jet);
         colorbar(axAfter);
 
         title(axAfter, ...
@@ -634,6 +643,9 @@ function plotSpectrogram(ax, signal, fsLocal, plotTitle)
         10*log10(P + eps));
 
     axis(ax, 'xy');
+
+    ylim(ax, [0 150])
+    colormap(ax, jet);
 
     colorbar(ax);
 

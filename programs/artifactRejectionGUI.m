@@ -733,27 +733,18 @@ switch templateType
 
     case 'Median-based'
 
-        % Your implementation
         template = signal;
 
     case 'Polynomial'
 
-        % Your implementation
         template = signal;
 
-    case 'Spline'
+    case 'Piecewise-linear'
 
-        % Your implementation
         template = signal;
 
     case 'Exponential'
 
-        % Your implementation
-        template = signal;
-
-    case 'Custom'
-
-        % Your implementation
         template = signal;
 
     otherwise

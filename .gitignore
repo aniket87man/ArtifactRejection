@@ -1,0 +1,71 @@
+# =========================
+# macOS
+# =========================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+
+
+# =========================
+# MATLAB
+# =========================
+
+# MATLAB autosave / backup files
+*.asv
+*.m~
+*.autosave
+
+# MATLAB generated files
+*.mex*
+*.p
+*.mlappinstall
+
+# MATLAB code generation / cache
+codegen/
+slprj/
+_simulink_cache/
+_simulink_model/
+
+
+# =========================
+# Python
+# =========================
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+
+
+# =========================
+# Jupyter
+# =========================
+
+.ipynb_checkpoints/
+
+
+# =========================
+# Data / Results
+# =========================
+
+# Uncomment these if you DON'T want experimental data in Git:
+# *.mat
+# data/
+# results/
+
+# Common generated output
+output/
+outputs/
+figures/
+
+
+# =========================
+# Temporary files
+# =========================
+
+*.tmp
+*.temp
+*.log

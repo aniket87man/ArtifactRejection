@@ -28,10 +28,17 @@ end
 templateTypes = { ...
     'Median-based', ...
     'Polynomial', ...
-    'Piecewise-linear', ...
-    'Exponential'};
+    'Exponential', ...
+    'Piecewise-linear'};
 
 selectedTemplateType = templateTypes{1};
+
+artifacRejectionMethods = { ...
+    'Template subtraction' ...
+    'Jitter and scale'};
+
+selectedMethod = artifacRejectionMethods{1};
+
 selectedTrial = 1;
 
 % Time vector
@@ -40,9 +47,20 @@ t = (0:nSamples-1) / fs;
 % Median signal
 medianSignal = median(data, 1, 'omitnan');
 
+medianSpikeTimes = [-0.010334 -0.0094; 0.03964 0.04056; 0.0896 0.0905; 0.13957 0.1405; 0.1895 0.1904; ...
+    0.2395 0.24036; 0.28947 0.2903; 0.3394 0.3424];
+
+medianSpikeLocs = zeros(size(medianSpikeTimes));
+
+for i = 1:size(medianSpikeLocs, 1)
+    medianSpikeLocs(i, 1) = find(times < medianSpikeTimes(i, 1), 1, 'last');
+    medianSpikeLocs(i, 2) = find(times > medianSpikeTimes(i, 2), 1, 'first');
+end
+% artifactEnd = 
+
 % Initial template and fit
 template = generateTemplate( ...
-    medianSignal, selectedTemplateType, fs);
+    times, medianSignal, selectedTemplateType, medianSpikeLocs, fs);
 
 fittedMedianTemplate = template;
 % fitTemplate( ...
@@ -55,7 +73,7 @@ trialTemplate = template;
 %     medianSignal, selectedTemplateType, fs);
 
 fittedTrialTemplate = fitTemplate( ...
-    data(1,:), trialTemplate, selectedTemplateType, fs);
+    times, data(1,:), trialTemplate, selectedMethod, fs);
 
 %% ------------------------------------------------------------
 % Create GUI
@@ -157,9 +175,10 @@ trialDropdown = uidropdown(controlGrid, ...
 trialDropdown.Tooltip = 'Choose trial';
 
 % Artifact rejection method dropdown
+
 methodDropdown = uidropdown(controlGrid, ...
-    'Items', {'Template subtraction', 'Jitter and scale'}, ...
-    'Value', 'Template subtraction', ...
+    'Items', artifacRejectionMethods, ...
+    'Value', selectedMethod, ...
     'ValueChangedFcn', @methodChanged);
 
 methodDropdown.Tooltip = 'Choose artifact rejection method';
@@ -281,10 +300,9 @@ function templateChanged(src, ~)
 
     % Update median
     template = generateTemplate( ...
-        medianSignal, selectedTemplateType, fs);
+        times, medianSignal, selectedTemplateType, medianSpikeLocs, fs);
     % 
-    % fittedMedianTemplate = fitTemplate( ...
-    %     medianSignal, template, selectedTemplateType, fs);
+    fittedMedianTemplate = template;
 
     % Update selected trial
     currentTrial = data(selectedTrial,:);
@@ -292,7 +310,7 @@ function templateChanged(src, ~)
     trialTemplate = template;
 
     fittedTrialTemplate = fitTemplate( ...
-        currentTrial, trialTemplate, selectedTemplateType, fs);
+        times, currentTrial, trialTemplate, selectedMethod, fs);
 
     updateMedianPlots();
     updateTrialPlots();
@@ -314,9 +332,10 @@ function trialChanged(src, ~)
     trialTemplate = template;
     % Fit template
     fittedTrialTemplate = fitTemplate( ...
+        times, ...
         currentTrial, ...
         trialTemplate, ...
-        selectedTemplateType, ...
+        selectedMethod, ...
         fs);
 
     updateTrialPlots();
@@ -331,8 +350,13 @@ function methodChanged(src, ~)
 
     selectedMethod = src.Value;
 
-    % Store the selected method for use during artifact rejection
-    fig.UserData.artifactRejectionMethod = selectedMethod;
+    currentTrial = data(selectedTrial,:);
+
+    % Generate template
+    trialTemplate = template;
+
+    fittedTrialTemplate = fitTemplate( ...
+        times, currentTrial, trialTemplate, selectedMethod, fs);
 
     % Update the selected-trial display
     updateTrialPlots();
@@ -456,13 +480,19 @@ function updateTrialPlots()
 
     plot(axTrial, ...
         times, fittedTrialTemplate, ...
+        'LineWidth', 1.4);
+
+    cleanedTrial = removeArtifact(currentTrial, fittedTrialTemplate, medianSpikeLocs);
+
+    plot(axTrial, ...
+        times, cleanedTrial, 'k', ...
         'LineWidth', 1.5);
 
     hold(axTrial, 'off');
 
     legend(axTrial, ...
         {sprintf('Trial %d', selectedTrial), ...
-         'Fitted Artifact'}, ...
+         'Fitted Artifact', 'Artifact Cleaned Trial'}, ...
         'Location', 'best');
 
     title(axTrial, ...
@@ -489,6 +519,8 @@ function updateTrialPlots()
 
     Ptemp = abs(fft(fittedTrialTemplate));
 
+    Pcleaned = abs(fft(cleanedTrial));
+
     plot(axTrialPSD, ...
         freqVals, 10*log10(Ptrial), ...
         'LineWidth', 1.2);
@@ -499,11 +531,19 @@ function updateTrialPlots()
         freqVals, 10*log10(Ptemp), ...
         'LineWidth', 1.2);
 
+    % plot(axTrialPSD, ...
+    %     freqVals, 10*log10(abs(Ptrial - Ptemp) + eps), 'k', ...
+    %     'LineWidth', 1.4);
+
+    plot(axTrialPSD, ...
+        freqVals, 10*log10(Pcleaned), 'k', ...
+        'LineWidth', 1.4);
+
     hold(axTrialPSD, 'off');
     xlim(axTrialPSD, PSDxlims);
 
     legend(axTrialPSD, ...
-        {'Trial', 'Fitted Artifact'}, ...
+        {'Trial', 'Fitted Artifact', 'Artifact Cleaned Trial'}, ...
         'Location', 'best');
 
     grid(axTrialPSD, 'on');
@@ -557,27 +597,28 @@ function runArtifactRejection(~, ~)
 
             currentTrial = data(k,:);
 
-            medianTemplate = generateTemplate( ...
+            medianTemplate = generateTemplate( times, ...
                 medianSignal, ...
                 selectedTemplateType, ...
+                medianSpikeLocs, ...
                 fs);
 
             % Generate template
-            currentTemplate = medianTemplate
+            currentTemplate = medianTemplate;
 
             % Fit template
             fittedTemplate = fitTemplate( ...
+                times, ...
                 currentTrial, ...
                 currentTemplate, ...
-                selectedTemplateType, ...
+                selectedMethod, ...
                 fs);
 
             % Remove artifact
             cleanedData(k,:) = removeArtifact( ...
                 currentTrial, ...
                 fittedTemplate, ...
-                selectedTemplateType, ...
-                fs);
+                medianSpikeLocs);
 
             % Progress
             if mod(k, max(1, floor(nTrials/10))) == 0
@@ -850,7 +891,7 @@ end
 
 %% Helper functions
 
-function template = generateTemplate(signal, templateType, fs)
+function template = generateTemplate(times, signal, templateType, spikeLocs, fs)
 
 switch templateType
 
@@ -859,8 +900,38 @@ switch templateType
         template = signal;
 
     case 'Polynomial'
+        answer = inputdlg('Enter a value for the number of polynomials to be used:', 'Input Window');
+
+        if isempty(answer)
+            disp('User cancelled the input.');
+        end
+
+        maxPolyOrder = 100;
+        minPolyOrder = 3;
+
+        polyOrder = str2double(answer{1});
+
+        if polyOrder<minPolyOrder
+            polyOrder = minPolyOrder;
+        elseif polyOrder>maxPolyOrder
+            polyOrder = maxPolyOrder;
+        end
 
         template = signal;
+
+        for i = 1:size(spikeLocs, 1)-1
+            timeSeg = times(spikeLocs(i, 2):spikeLocs(i+1, 1));
+            signalSeg = signal(spikeLocs(i, 2):spikeLocs(i+1, 1));
+            fittedPoly = fitPolynomialFunction(timeSeg, signalSeg, polyOrder);
+
+            template(spikeLocs(i, 2):spikeLocs(i+1, 1)) = fittedPoly;
+        end
+
+        timeSeg = times(spikeLocs(8, 2):end);
+        signalSeg = signal(spikeLocs(8, 2):end);
+        fittedPoly = fitPolynomialFunction(timeSeg, signalSeg, polyOrder);
+
+        template(spikeLocs(8, 2):end) = fittedPoly;
 
     case 'Piecewise-linear'
 
@@ -869,6 +940,37 @@ switch templateType
     case 'Exponential'
 
         template = signal;
+
+        answer = inputdlg('Enter a value for the number of exponentials to be used:', 'Input Window');
+
+        if isempty(answer)
+            disp('User cancelled the input.');
+        end
+
+        maxExpoOrder = 100;
+        minExpoOrder = 3;
+
+        expoOrder = str2double(answer{1});
+
+        if expoOrder<minExpoOrder
+            expoOrder = minExpoOrder;
+        elseif expoOrder>maxExpoOrder
+            expoOrder = maxExpoOrder;
+        end
+
+        for i = 1:size(spikeLocs, 1)-1
+            timeSeg = times(spikeLocs(i, 2):spikeLocs(i+1, 1));
+            signalSeg = signal(spikeLocs(i, 2):spikeLocs(i+1, 1));
+            fittedExpo = fitMultipleExponentials(timeSeg, signalSeg, expoOrder);
+
+            template(spikeLocs(i, 2):spikeLocs(i+1, 1)) = fittedExpo;
+        end
+
+        timeSeg = times(spikeLocs(8, 2):end);
+        signalSeg = signal(spikeLocs(8, 2):end);
+        fittedExpo = fitMultipleExponentials(timeSeg, signalSeg, 5);
+
+        template(spikeLocs(8, 2):end) = fittedExpo;
 
     otherwise
         error('Unknown template type.');
@@ -879,19 +981,70 @@ end
 
 
 function fittedTemplate = fitTemplate( ...
-    signal, template, templateType, fs)
+    time, signal, template, methodType, fs)
 
-if strcmp(templateType, 'Median-based')
+if strcmp(methodType, 'Template subtraction')
 fittedTemplate = template;
+
+elseif strcmp(methodType, 'Jitter and scale')
+
+    fitOptions = optimoptions( ...
+    'lsqcurvefit', ...
+    'Algorithm', 'trust-region-reflective', ...
+    'Display', 'off', ...
+    'FiniteDifferenceType', 'central', ...
+    'TypicalX', [1; 0.001], ...
+    'MaxFunctionEvaluations', 500, ...
+    'FunctionTolerance', 1e-10, ...
+    'StepTolerance', 1e-10, ...
+    'OptimalityTolerance', 1e-10);
+
+    maximumShiftSeconds = 0.002;        % +/- 2 ms, 6 ms
+    fitSearchRateHz = fs;             % Full LFP; reduced scoring for Raw
+
+    initialParameters = [1; 0];         % [gain; shiftSeconds]
+    lowerBounds = [0; -maximumShiftSeconds];
+    upperBounds = [Inf; maximumShiftSeconds];
+
+    % Every possible shift must remain inside the recorded template.
+    commonFitMask = ...
+        time >= time(1) + maximumShiftSeconds & ...
+        time <= time(end) - maximumShiftSeconds;
+    
+    fitIndices = find(commonFitMask);
+    
+    fitStride = max(1, round(fs / fitSearchRateHz));
+    fitIndices = fitIndices(1:fitStride:end);
+
+    if numel(fitIndices) < 20
+        error('Too few valid samples are available for lsqcurvefit.');
+    end
+    
+    fitTime = time(fitIndices);
+
+    fitResult = fitCurveJitterScale( ...
+            signal, time, template, ...
+            fitIndices, fitTime, ...
+            initialParameters, lowerBounds, upperBounds, fitOptions);
+
+    fittedTemplate = fitResult.FittedArtifact;
 end
 
 end
 
 
 function cleanedSignal = removeArtifact( ...
-    signal, fittedTemplate, templateType, fs);
+    signal, fittedTemplate, spikeLocs)
 
 cleanedSignal = signal - fittedTemplate;
+
+numspikes = size(spikeLocs, 1);
+
+for ii = 1:numspikes
+    preVal = cleanedSignal(spikeLocs(ii, 1));
+    postVal = cleanedSignal(spikeLocs(ii, 2));
+    cleanedSignal(spikeLocs(ii, 1):spikeLocs(ii, 2)) = linspace(preVal, postVal, length(spikeLocs(ii, 1):spikeLocs(ii, 2)));
+end
 
 end
 
@@ -911,14 +1064,374 @@ function modelValues = shiftedTemplateModel( ...
     modelValues = gain * shiftedTemplate;
 end
 
+function fittedValues = fitPolynomialFunction( ...
+    time, signal, polynomialOrder)
 
-function fitResult = fitOneSummedCurve( ...
-    summedCurve, time, artifactTemplate, ...
+    time = time(:);
+    signal = signal(:);
+
+    valid = ...
+        isfinite(time) & ...
+        isfinite(signal);
+
+    if nnz(valid) < polynomialOrder + 1
+
+        error([ ...
+            'Polynomial order %d requires at least %d valid samples. ' ...
+            'Only %d valid samples are available.'], ...
+            polynomialOrder, ...
+            polynomialOrder + 1, ...
+            nnz(valid));
+
+    end
+
+
+    % ---------------------------------------------------------------
+    % Valid data
+    % ---------------------------------------------------------------
+
+    t = time(valid);
+    y = signal(valid);
+
+
+    % Sort time
+    [t, sortIndex] = sort(t);
+    y = y(sortIndex);
+
+
+    % ---------------------------------------------------------------
+    % Map time to [-1,1]
+    % ---------------------------------------------------------------
+
+    tMin = min(t);
+    tMax = max(t);
+
+    if tMax <= tMin
+        error('Time vector must contain at least two distinct values.');
+    end
+
+    x = 2*(t - tMin)/(tMax - tMin) - 1;
+
+
+    % ---------------------------------------------------------------
+    % Construct Chebyshev design matrix
+    %
+    % T_0(x) = 1
+    % T_1(x) = x
+    % T_n(x) = 2*x*T_{n-1}(x) - T_{n-2}(x)
+    % ---------------------------------------------------------------
+
+    N = numel(x);
+    P = polynomialOrder;
+
+    X = zeros(N, P+1);
+
+    X(:,1) = 1;
+
+    if P >= 1
+        X(:,2) = x;
+    end
+
+    for k = 2:P
+
+        X(:,k+1) = ...
+            2*x.*X(:,k) - X(:,k-1);
+
+    end
+
+
+    % ---------------------------------------------------------------
+    % Least-squares fit
+    %
+    % Backslash is preferable to explicitly computing
+    % inv(X'*X).
+    % ---------------------------------------------------------------
+
+    coefficients = X \ y;
+
+
+    % ---------------------------------------------------------------
+    % Evaluate fitted polynomial on ALL time points
+    % ---------------------------------------------------------------
+
+    xAll = ...
+        2*(time - tMin)/(tMax - tMin) - 1;
+
+
+    fittedValues = evaluateChebyshevPolynomial( ...
+        xAll, ...
+        coefficients);
+
+
+    fittedValues = fittedValues(:).';
+
+end
+
+
+function y = evaluateChebyshevPolynomial(x, coefficients)
+
+    x = x(:);
+
+    P = numel(coefficients) - 1;
+
+    % Start with highest-order term
+    b1 = zeros(size(x));
+    b2 = zeros(size(x));
+
+    % Clenshaw recurrence
+    %
+    % This is much more numerically stable than explicitly calculating
+    % T_0(x), T_1(x), ..., T_P(x) and multiplying each by its coefficient.
+
+    for k = P:-1:1
+
+        b0 = ...
+            2*x.*b1 - b2 + coefficients(k+1);
+
+        b2 = b1;
+        b1 = b0;
+
+    end
+
+    y = ...
+        x.*b1 - b2 + coefficients(1);
+
+end
+
+
+function [fittedValues, fittedExpoParams] = fitMultipleExponentials( ...
+    time, signal, numberExponentials)
+
+    time = time(:);
+    signal = signal(:);
+
+    valid = ...
+        isfinite(time) & ...
+        isfinite(signal);
+
+    if nnz(valid) < 20
+        error('Not enough valid samples for exponential fitting.');
+    end
+
+
+    % ---------------------------------------------------------------
+    % Valid data
+    % ---------------------------------------------------------------
+
+    t = time(valid);
+    y = signal(valid);
+
+    [t, sortIndex] = sort(t);
+    y = y(sortIndex);
+
+
+    % Remove duplicate time values
+    [t, uniqueIndex] = unique(t);
+    y = y(uniqueIndex);
+
+
+    K = numberExponentials;
+
+
+    % ---------------------------------------------------------------
+    % Shift time so that fitting starts at t = 0
+    % ---------------------------------------------------------------
+
+    t0 = min(t);
+
+    tFit = t - t0;
+
+
+    % ---------------------------------------------------------------
+    % Initial estimates
+    % ---------------------------------------------------------------
+
+    baseline = median(y(end));
+
+    signalAmplitude = y(1) - baseline;
+
+
+    % If amplitude is very small, use data range instead
+    if abs(signalAmplitude) < eps(max(abs(y)))
+
+        signalAmplitude = ...
+            max(y) - min(y);
+
+    end
+
+
+    % Initial amplitudes
+    A0 = signalAmplitude / K * ones(K,1);
+
+
+    % Estimate a range of time constants
+    totalDuration = max(tFit);
+
+    if totalDuration <= 0
+        error('Time vector must contain more than one distinct value.');
+    end
+
+
+    % Log-spaced initial time constants
+    tauMin = max(totalDuration / 100, ...
+                 1 / (100 * max(1, 1/(t(2)-t(1)))));
+
+    tauMax = totalDuration * 2;
+
+    tau0 = logspace( ...
+        log10(tauMin), ...
+        log10(tauMax), ...
+        K).';
+
+
+    % ---------------------------------------------------------------
+    % Parameter vector
+    %
+    % p = [baseline
+    %      A1 ... AK
+    %      tau1 ... tauK]
+    % ---------------------------------------------------------------
+
+    p0 = [ ...
+        baseline; ...
+        A0; ...
+        tau0];
+
+
+    % ---------------------------------------------------------------
+    % Bounds
+    % ---------------------------------------------------------------
+
+    amplitudeScale = ...
+        max(abs(y - baseline));
+
+    if amplitudeScale == 0
+        amplitudeScale = 1;
+    end
+
+
+    lowerAmplitude = ...
+        -100 * amplitudeScale;
+
+    upperAmplitude = ...
+        100 * amplitudeScale;
+
+
+    lowerTau = ...
+        max(tauMin / 10, eps);
+
+    upperTau = ...
+        max(tauMax * 10, lowerTau * 10);
+
+
+    lowerBounds = [ ...
+        min(y) - 10*amplitudeScale; ...
+        lowerAmplitude * ones(K,1); ...
+        lowerTau * ones(K,1)];
+
+
+    upperBounds = [ ...
+        max(y) + 10*amplitudeScale; ...
+        upperAmplitude * ones(K,1); ...
+        upperTau * ones(K,1)];
+
+
+    % ---------------------------------------------------------------
+    % Model
+    % ---------------------------------------------------------------
+
+    modelFunction = @(p,t) ...
+        exponentialModel(p,t,K);
+
+
+    % ---------------------------------------------------------------
+    % Optimization options
+    % ---------------------------------------------------------------
+
+    options = optimoptions( ...
+        'lsqcurvefit', ...
+        'Display', 'off', ...
+        'MaxIterations', 1000, ...
+        'MaxFunctionEvaluations', 5000, ...
+        'FunctionTolerance', 1e-10, ...
+        'StepTolerance', 1e-10);
+
+
+    % ---------------------------------------------------------------
+    % Fit
+    % ---------------------------------------------------------------
+
+    fittedParameters = lsqcurvefit( ...
+        modelFunction, ...
+        p0, ...
+        tFit, ...
+        y, ...
+        lowerBounds, ...
+        upperBounds, ...
+        options);
+
+
+    % ---------------------------------------------------------------
+    % Evaluate on complete original time vector
+    % ---------------------------------------------------------------
+
+    tAll = time - t0;
+
+    fittedValues = exponentialModel( ...
+        fittedParameters, ...
+        tAll, ...
+        K);    
+
+    fittedValues = fittedValues(:).';
+    [fittedExpoParams.amplitudes, fittedExpoParams.timeConstants] = sortExponentialParameters(fittedParameters, K);
+
+end
+
+
+function y = exponentialModel(p, t, K)
+
+    baseline = p(1);
+
+    amplitudes = p(2:K+1);
+
+    timeConstants = p(K+2:2*K+1);
+
+
+    y = baseline * ones(size(t));
+
+
+    for k = 1:K
+
+        y = y + ...
+            amplitudes(k) .* ...
+            exp(-t ./ timeConstants(k));
+
+    end
+
+end
+
+
+function [amplitudes, timeConstants] = ...
+    sortExponentialParameters(p, K)
+
+    amplitudes = p(2:K+1);
+
+    timeConstants = p(K+2:2*K+1);
+
+    [timeConstants, order] = sort(timeConstants);
+
+    amplitudes = amplitudes(order);
+
+end
+
+
+function fitResult = fitCurveJitterScale( ...
+    signal, time, artifactTemplate, ...
     fitIndices, fitTime, ...
     initialParameters, lowerBounds, upperBounds, fitOptions)
 % Fit one gain and one time shift with MATLAB lsqcurvefit.
 
-    observedAtFitSamples = summedCurve(fitIndices).';
+    observedAtFitSamples = signal(fitIndices).';
 
     modelFunction = @(parameters, queryTime) ...
         shiftedTemplateModel( ...
@@ -934,8 +1447,18 @@ function fitResult = fitOneSummedCurve( ...
         upperBounds, ...
         fitOptions);
 
-    fittedArtifact = shiftedTemplateModel( ...
-        parameters, time(:), time, artifactTemplate).';
+    % fittedArtifact = shiftedTemplateModel( ...
+    %     parameters, time(:), time, artifactTemplate).';
+    shiftedTime = time - parameters(2);
+
+    fittedArtifact = interp1( ...
+        time(:), ...
+        artifactTemplate, ...
+        shiftedTime(:), ...
+        'linear', ...
+        0).';
+
+    fittedArtifact = parameters(1) * fittedArtifact;
 
     fitResult = struct( ...
         'Gain', parameters(1), ...

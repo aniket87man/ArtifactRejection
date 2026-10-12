@@ -44,13 +44,15 @@ medianSignal = median(data, 1, 'omitnan');
 template = generateTemplate( ...
     medianSignal, selectedTemplateType, fs);
 
-fittedMedianTemplate = fitTemplate( ...
-    medianSignal, template, selectedTemplateType, fs);
+fittedMedianTemplate = template;
+% fitTemplate( ...
+%     medianSignal, template, selectedTemplateType, fs);
 
 % Fit first trial
 % initially median is the template
-trialTemplate = generateTemplate( ...
-    medianSignal, selectedTemplateType, fs);
+trialTemplate = template;
+% generateTemplate( ...
+%     medianSignal, selectedTemplateType, fs);
 
 fittedTrialTemplate = fitTemplate( ...
     data(1,:), trialTemplate, selectedTemplateType, fs);
@@ -102,7 +104,7 @@ leftTemplateDropdown.Tooltip = 'Choose artifact template method';
 %% Axes
 
 axMedian = uiaxes(leftGrid);
-title(axMedian, 'Median signal + fitted template');
+title(axMedian, 'Median signal + median fitted template');
 xlabel(axMedian, 'Time (s)');
 ylabel(axMedian, 'Amplitude');
 grid(axMedian, 'on');
@@ -137,25 +139,41 @@ middleGrid.RowHeight = {35, '1x', '1x', '1x', '1x'};
 middleGrid.RowSpacing = 5;
 middleGrid.Padding = [5 5 5 5];
 
-%% Trial dropdown
+%% Row 1: Trial number + artifact rejection method
 
-trialDropdown = uidropdown(middleGrid, ...
+controlGrid = uigridlayout(middleGrid, [1 2]);
+controlGrid.Layout.Row = 1;
+controlGrid.ColumnWidth = {'1x', '1.5x'};
+controlGrid.ColumnSpacing = 5;
+controlGrid.Padding = [0 0 0 0];
+
+% Trial dropdown
+
+trialDropdown = uidropdown(controlGrid, ...
     'Items', createTrialNames(nTrials), ...
     'Value', 'Trial 1', ...
     'ValueChangedFcn', @trialChanged);
 
 trialDropdown.Tooltip = 'Choose trial';
 
+% Artifact rejection method dropdown
+methodDropdown = uidropdown(controlGrid, ...
+    'Items', {'Template subtraction', 'Jitter and scale'}, ...
+    'Value', 'Template subtraction', ...
+    'ValueChangedFcn', @methodChanged);
+
+methodDropdown.Tooltip = 'Choose artifact rejection method';
+
 %% Axes
 
 axTrial = uiaxes(middleGrid);
-title(axTrial, 'Selected trial + fitted template');
+title(axTrial, 'Selected trial + fitted artifact');
 xlabel(axTrial, 'Time (s)');
 ylabel(axTrial, 'Amplitude');
 grid(axTrial, 'on');
 
 axTrialPSD = uiaxes(middleGrid);
-title(axTrialPSD, 'PSD: trial vs template');
+title(axTrialPSD, 'PSD: trial vs fitted artifact');
 xlabel(axTrialPSD, 'Frequency (Hz)');
 ylabel(axTrialPSD, 'Power/Frequency');
 grid(axTrialPSD, 'on');
@@ -264,15 +282,14 @@ function templateChanged(src, ~)
     % Update median
     template = generateTemplate( ...
         medianSignal, selectedTemplateType, fs);
-
-    fittedMedianTemplate = fitTemplate( ...
-        medianSignal, template, selectedTemplateType, fs);
+    % 
+    % fittedMedianTemplate = fitTemplate( ...
+    %     medianSignal, template, selectedTemplateType, fs);
 
     % Update selected trial
     currentTrial = data(selectedTrial,:);
 
-    trialTemplate = generateTemplate( ...
-        currentTrial, selectedTemplateType, fs);
+    trialTemplate = template;
 
     fittedTrialTemplate = fitTemplate( ...
         currentTrial, trialTemplate, selectedTemplateType, fs);
@@ -294,9 +311,7 @@ function trialChanged(src, ~)
     currentTrial = data(selectedTrial,:);
 
     % Generate template
-    trialTemplate = generateTemplate( ...
-        currentTrial, selectedTemplateType, fs);
-
+    trialTemplate = template;
     % Fit template
     fittedTrialTemplate = fitTemplate( ...
         currentTrial, ...
@@ -304,6 +319,22 @@ function trialChanged(src, ~)
         selectedTemplateType, ...
         fs);
 
+    updateTrialPlots();
+
+end
+
+%% ============================================================
+% UPDATE ARTIFACT REJECTION METHOD
+% =============================================================
+
+function methodChanged(src, ~)
+
+    selectedMethod = src.Value;
+
+    % Store the selected method for use during artifact rejection
+    fig.UserData.artifactRejectionMethod = selectedMethod;
+
+    % Update the selected-trial display
     updateTrialPlots();
 
 end
@@ -333,11 +364,11 @@ function updateMedianPlots()
     hold(axMedian, 'off');
 
     legend(axMedian, ...
-        {'Median', 'Fitted template'}, ...
+        {'Median', 'Median Fitted Template'}, ...
         'Location', 'best');
 
     title(axMedian, ...
-        ['Median + fitted template (' ...
+        ['Median + median fitted template (' ...
         selectedTemplateType ')']);
 
     xlabel(axMedian, 'Time (s)');
@@ -372,7 +403,7 @@ function updateMedianPlots()
     xlim(axMedianPSD, PSDxlims);
 
     legend(axMedianPSD, ...
-        {'Median', 'Template'}, ...
+        {'Median', 'Median Fitted Template'}, ...
         'Location', 'best');
 
     grid(axMedianPSD, 'on');
@@ -399,7 +430,7 @@ function updateMedianPlots()
         axTemplateSpec, ...
         fittedMedianTemplate, ...
         fs, ...
-        'Template spectrogram');
+        'Median Fitted Template Spectrogram');
 
 end
 
@@ -431,11 +462,11 @@ function updateTrialPlots()
 
     legend(axTrial, ...
         {sprintf('Trial %d', selectedTrial), ...
-         'Fitted template'}, ...
+         'Fitted Artifact'}, ...
         'Location', 'best');
 
     title(axTrial, ...
-        sprintf('Trial %d + fitted template (%s)', ...
+        sprintf('Trial %d + fitted artifact (%s)', ...
         selectedTrial, selectedTemplateType));
 
     xlabel(axTrial, 'Time (s)');
@@ -472,7 +503,7 @@ function updateTrialPlots()
     xlim(axTrialPSD, PSDxlims);
 
     legend(axTrialPSD, ...
-        {'Trial', 'Template'}, ...
+        {'Trial', 'Fitted Artifact'}, ...
         'Location', 'best');
 
     grid(axTrialPSD, 'on');
@@ -497,9 +528,9 @@ function updateTrialPlots()
 
     plotSpectrogram( ...
         axTrialTemplateSpec, ...
-        fittedTrialTemplate, ...
+        currentTrial-fittedTrialTemplate, ...
         fs, ...
-        'Template spectrogram');
+        '(Trial - Fitted Artifact) spectrogram');
 
 end
 
@@ -526,11 +557,13 @@ function runArtifactRejection(~, ~)
 
             currentTrial = data(k,:);
 
-            % Generate template
-            currentTemplate = generateTemplate( ...
-                currentTrial, ...
+            medianTemplate = generateTemplate( ...
+                medianSignal, ...
                 selectedTemplateType, ...
                 fs);
+
+            % Generate template
+            currentTemplate = medianTemplate
 
             % Fit template
             fittedTemplate = fitTemplate( ...
@@ -579,7 +612,7 @@ function runArtifactRejection(~, ~)
             10*log10(avgBefore + eps));
 
         axis(axBefore, 'xy');
-        ylim(axBefore, [0 150]);
+        ylim(axBefore, [0 100]);
         colormap(axBefore, jet);
         colorbar(axBefore);
 
@@ -601,7 +634,7 @@ function runArtifactRejection(~, ~)
             10*log10(avgAfter + eps));
 
         axis(axAfter, 'xy');
-        ylim(axAfter, [0 150]);
+        ylim(axAfter, [0 100]);
         colormap(axAfter, jet);
         colorbar(axAfter);
 
@@ -650,35 +683,45 @@ function plotSpectrogram(ax, signal, fsLocal, plotTitle)
 
     signal = signal(:);
 
-    % Choose spectrogram parameters
-    windowLength = min(256, length(signal));
+    % % Choose spectrogram parameters
+    % windowLength = min(256, length(signal));
+    % 
+    % if windowLength < 8
+    %     warning('Signal is too short for spectrogram.');
+    %     return;
+    % end
+    % 
+    % overlap = round(0.75 * windowLength);
 
-    if windowLength < 8
-        warning('Signal is too short for spectrogram.');
-        return;
-    end
+    % Setup multitaper
+    params.tapers   = [1 1];
+    params.pad      = -1;
+    params.Fs       = fs;
+    params.fpass    = [0 250];
 
-    overlap = round(0.75 * windowLength);
+    movingWin = [0.25 0.025];
 
-    nfft = max(256, 2^nextpow2(windowLength));
+    % nfft = max(256, 2^nextpow2(windowLength));
+    % 
+    % [S, F, T] = spectrogram( ...
+    %     signal, ...
+    %     hamming(windowLength), ...
+    %     overlap, ...
+    %     nfft, ...
+    %     fsLocal);
+    % 
+    % P = abs(S).^2;
 
-    [S, F, T] = spectrogram( ...
-        signal, ...
-        hamming(windowLength), ...
-        overlap, ...
-        nfft, ...
-        fsLocal);
-
-    P = abs(S).^2;
+    [P, T, F] = mtspecgramc(signal,movingWin,params);
 
     imagesc(ax, ...
-        times, ...
+        times(1) + T, ...
         F, ...
-        10*log10(P + eps));
+        10*log10(P.' + eps));
 
     axis(ax, 'xy');
 
-    ylim(ax, [0 150])
+    ylim(ax, [0 100])
     colormap(ax, jet);
 
     colorbar(ax);
@@ -698,49 +741,95 @@ function [avgSpec, F, T] = averageSpectrogram(allData, fsLocal)
 
     [nTr, ~] = size(allData);
 
-    % First trial determines dimensions
-    firstSignal = allData(1,:);
+    movingWin = [0.25 0.025];
 
-    windowLength = min(256, length(firstSignal));
-    overlap = round(0.75 * windowLength);
-    nfft = max(256, 2^nextpow2(windowLength));
+    params.tapers = [1 1];
+    params.pad    = -1;
+    params.Fs     = fsLocal;
+    params.fpass  = [0 min(250, fsLocal/2)];
 
-    [S, F, T] = spectrogram( ...
-        firstSignal, ...
-        hamming(windowLength), ...
-        overlap, ...
-        nfft, ...
-        fsLocal);
+    avgSpec = [];
 
-    avgSpec = abs(S).^2;
+    for k = 1:nTr
 
-    % ---------------------------------------------------------
-    % Accumulate remaining trials
-    % ---------------------------------------------------------
+        signal = allData(k,:).';
 
-    for k = 2:nTr
+        [P, Tcurrent, Fcurrent] = ...
+            mtspecgramc(signal, movingWin, params);
 
-        signal = allData(k,:);
+        % Convert to frequency x time for plotting
+        P = P.';
 
-        [S, Ftmp, Ttmp] = spectrogram( ...
-            signal, ...
-            hamming(windowLength), ...
-            overlap, ...
-            nfft, ...
-            fsLocal);
+        if k == 1
+            avgSpec = zeros(size(P));
+            T = Tcurrent;
+            F = Fcurrent;
+        else
+            if ~isequal(size(P), size(avgSpec)) || ...
+               ~isequal(Tcurrent, T) || ...
+               ~isequal(Fcurrent, F)
 
-        % Sanity check
-        if ~isequal(size(S), size(avgSpec))
-            error('Spectrogram dimensions differ between trials.');
+                error('Spectrogram dimensions differ between trials.');
+            end
         end
 
-        avgSpec = avgSpec + abs(S).^2;
+        % Accumulate linear power, NOT decibel values
+        avgSpec = avgSpec + P;
 
     end
 
+    % Average power first; convert to dB only when plotting
     avgSpec = avgSpec / nTr;
 
 end
+
+% function [avgSpec, F, T] = averageSpectrogram(allData, fsLocal)
+% 
+%     [nTr, ~] = size(allData);
+% 
+%     % First trial determines dimensions
+%     firstSignal = allData(1,:);
+% 
+%     windowLength = min(256, length(firstSignal));
+%     overlap = round(0.75 * windowLength);
+%     nfft = max(256, 2^nextpow2(windowLength));
+% 
+%     [S, F, T] = spectrogram( ...
+%         firstSignal, ...
+%         hamming(windowLength), ...
+%         overlap, ...
+%         nfft, ...
+%         fsLocal);
+% 
+%     avgSpec = abs(S).^2;
+% 
+%     % ---------------------------------------------------------
+%     % Accumulate remaining trials
+%     % ---------------------------------------------------------
+% 
+%     for k = 2:nTr
+% 
+%         signal = allData(k,:);
+% 
+%         [S, Ftmp, Ttmp] = spectrogram( ...
+%             signal, ...
+%             hamming(windowLength), ...
+%             overlap, ...
+%             nfft, ...
+%             fsLocal);
+% 
+%         % Sanity check
+%         if ~isequal(size(S), size(avgSpec))
+%             error('Spectrogram dimensions differ between trials.');
+%         end
+% 
+%         avgSpec = avgSpec + abs(S).^2;
+% 
+%     end
+% 
+%     avgSpec = avgSpec / nTr;
+% 
+% end
 
 %% ============================================================
 % TRIAL DROPDOWN NAMES

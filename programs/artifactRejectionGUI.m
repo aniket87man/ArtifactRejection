@@ -73,7 +73,7 @@ trialTemplate = template;
 %     medianSignal, selectedTemplateType, fs);
 
 fittedTrialTemplate = fitTemplate( ...
-    times, data(1,:), trialTemplate, selectedMethod, fs);
+    times, data(1,:), trialTemplate, selectedMethod, medianSpikeLocs, fs);
 
 %% ------------------------------------------------------------
 % Create GUI
@@ -310,7 +310,7 @@ function templateChanged(src, ~)
     trialTemplate = template;
 
     fittedTrialTemplate = fitTemplate( ...
-        times, currentTrial, trialTemplate, selectedMethod, fs);
+        times, currentTrial, trialTemplate, selectedMethod, medianSpikeLocs, fs);
 
     updateMedianPlots();
     updateTrialPlots();
@@ -336,6 +336,7 @@ function trialChanged(src, ~)
         currentTrial, ...
         trialTemplate, ...
         selectedMethod, ...
+        medianSpikeLocs, ...
         fs);
 
     updateTrialPlots();
@@ -356,7 +357,7 @@ function methodChanged(src, ~)
     trialTemplate = template;
 
     fittedTrialTemplate = fitTemplate( ...
-        times, currentTrial, trialTemplate, selectedMethod, fs);
+        times, currentTrial, trialTemplate, selectedMethod, medianSpikeLocs, fs);
 
     % Update the selected-trial display
     updateTrialPlots();
@@ -612,6 +613,7 @@ function runArtifactRejection(~, ~)
                 currentTrial, ...
                 currentTemplate, ...
                 selectedMethod, ...
+                medianSpikeLocs, ...
                 fs);
 
             % Remove artifact
@@ -981,12 +983,25 @@ end
 
 
 function fittedTemplate = fitTemplate( ...
-    time, signal, template, methodType, fs)
+    time, signal, template, methodType, spikeLocs, fs)
 
 if strcmp(methodType, 'Template subtraction')
 fittedTemplate = template;
 
 elseif strcmp(methodType, 'Jitter and scale')
+
+    % numspikes = size(spikeLocs, 1);
+    % for ii = 1:numspikes
+    %     preVal = signal(spikeLocs(ii, 1));
+    %     postVal = signal(spikeLocs(ii, 2));
+    %     signal(spikeLocs(ii, 1):spikeLocs(ii, 2)) = linspace(preVal, postVal, length(spikeLocs(ii, 1):spikeLocs(ii, 2)));
+    % end
+    % 
+    % for ii = 1:numspikes
+    %     preVal = template(spikeLocs(ii, 1));
+    %     postVal = template(spikeLocs(ii, 2));
+    %     template(spikeLocs(ii, 1):spikeLocs(ii, 2)) = linspace(preVal, postVal, length(spikeLocs(ii, 1):spikeLocs(ii, 2)));
+    % end
 
     fitOptions = optimoptions( ...
     'lsqcurvefit', ...

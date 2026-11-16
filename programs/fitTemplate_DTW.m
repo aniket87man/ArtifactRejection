@@ -53,8 +53,8 @@ for trialIdx=1:nTrials
     % cleanedSigs(i, 1:length(ix)) = cleaned;
 
     % [dist, trialAlgn, templateAlgn, pathXY, info] = dtwAlign(trial, template, 'Norm', 'l2');
-    % [dist, trialAlgn, templateAlgn, pathXY, info] = dtwAlign(trial, template, 'Norm', 'l2', 'Constraint', 'sakoechiba', 'Radius', 100, 'Normalize', true);
-    [dist, trialAlgn, templateAlgn, pathXY, info] = dtwAlign(trial, template, 'Norm', 'l2', 'Constraint', 'itakura', 'Normalize', true);
+    [dist, trialAlgn, templateAlgn, pathXY, info] = dtwAlign(trial, template, 'Norm', 'l2', 'Constraint', 'sakoechiba', 'Radius', 100, 'Normalize', true);
+    % [dist, trialAlgn, templateAlgn, pathXY, info] = dtwAlign(trial, template, 'Norm', 'l2', 'Constraint', 'itakura', 'Normalize', true);
 
     dtwDists(trialIdx) = dist;
     dtwLengths(trialIdx) = info.pathLength;

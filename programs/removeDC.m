@@ -1,4 +1,4 @@
-function dataDC = removeDC(data, blpos)
+function [dataDC, dc] = removeDC(data, blpos)
     dc = mean(data(:, blpos), 2);
     dataDC = data - dc;
 end
